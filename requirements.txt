@@ -1,0 +1,5 @@
+geopy==1.18.1
+beautifulsoup4==4.6.0
+requests==2.18.4
+pandas==0.23.0
+sqlalchemy==1.2.17
