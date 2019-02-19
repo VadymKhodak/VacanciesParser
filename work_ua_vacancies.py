@@ -187,4 +187,3 @@ def get_vacancies(cities=['kyiv'], categories=['it']):
     return pd.read_sql(f'SELECT * FROM public."work_ua_vacancies1_{datetime.date.today()}"', engine)
 
 
-print(get_cities())
