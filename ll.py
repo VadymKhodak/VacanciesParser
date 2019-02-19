@@ -21,5 +21,7 @@ ll = {
       "yampil_sm ": {"city_latitude": 51.948685, "city_longitude": 33.750493},
       "semenivka_cn ": {"city_latitude": 52.1728604, "city_longitude": 32.5572066},
       "mykolaivka_dn ": {"city_latitude": 48.8503794, "city_longitude": 37.7500589},
-      "kalynivka_kv ": {"city_latitude": 50.274755, "city_longitude": 30.2751436}
+      "kalynivka_vn": {"city_latitude": 49.4472051, "city_longitude": 28.4986365},
+      "kamianske": {"city_latitude": 48.5391058, "city_longitude": 34.4705842},
+      "kalynivka_kv": {"city_latitude": 50.274755, "city_longitude": 30.2751436}
       }
