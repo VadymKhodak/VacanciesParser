@@ -1,3 +1,8 @@
+"""
+It is a script that has functions to parse work.ua site.
+"""
+
+
 def connect_to_database(host=False, database=False, username=False, password=False):
     """
     connect_to_database is a function that takes connection data and return a sqlalchemy engine.
@@ -11,13 +16,14 @@ def connect_to_database(host=False, database=False, username=False, password=Fal
     """
     from sqlalchemy import create_engine
     import getpass
-    if not host:
+
+    if host is False:
         host = input("Host: ")
-    if not database:
+    if database is False:
         database = input("Database: ")
-    if not username:
+    if username is False:
         username = input("Username: ")
-    if not password:
+    if password is False:
         password = getpass.getpass(prompt='Password: ', stream=None)
 
     return create_engine(f'postgresql://{username}:{password}@{host}/{database}')
@@ -74,26 +80,35 @@ def get_cities():
                     else:
                         city_latitude = location.latitude
                         city_longitude = location.longitude
-            cities_dict = {"city_id": city_id
-                , "city_name": city_name
-                , "city_lat_name": city_lat_name
-                , "city_link": city_link
-                , "city_latitude": city_latitude
-                , "city_longitude": city_longitude
-                           }
+            cities_dict = {"city_id": city_id,
+                           "city_name": city_name,
+                           "city_lat_name": city_lat_name,
+                           "city_link": city_link,
+                           "city_latitude": city_latitude,
+                           "city_longitude": city_longitude}
             cities = pd.DataFrame(cities_dict, index=[0])
-            cities.to_sql(f'city_work_ua1_{datetime.date.today()}', engine, if_exists='append')
+            cities.to_sql(f'city_work_ua_{datetime.date.today()}', engine, if_exists='append')
             print(i, city_name, time() - start_page, datetime.datetime.now())
         else:
             print(i, None, time() - start_page, datetime.datetime.now())
     print(time() - start)
-    sql_query_city = f'SELECT * FROM public."city_work_ua1_{datetime.date.today()}"'
+    sql_query_city = f'SELECT * FROM public."city_work_ua_{datetime.date.today()}"'
     cities_list = pd.read_sql(sql_query_city, engine)
     city_lat_name_list = list(cities_list.city_lat_name)
     return city_lat_name_list
 
 
 def get_categories():
+    """
+    get_categories is a function that parse work.ua site to get categories for parsing vacancies.
+    It saves information about categories like:
+    - category_names         name of category. Example: "IT, комп'ютери, інтернет"
+    - category_links         url. Example: "https://www.work.ua/jobs-kyiv-it/"
+    - category_values        like id. Example: "1"
+    - category_lat_names     name of city or town using Latin alphabet. Example: "it"
+
+    :return: list of categories from work.ua (category_lat_names)
+    """
     import requests
     import pandas as pd
     import datetime
@@ -117,11 +132,32 @@ def get_categories():
         "category_lat_name": category_lat_names
     }
     categories = pd.DataFrame.from_dict(categories_dict)
-    categories.to_sql(f'category_list_work_ua1{datetime.date.today()}', postgres_engine, if_exists='replace')
+    categories.to_sql(f'category_list_work_ua{datetime.date.today()}',
+                      postgres_engine,
+                      if_exists='replace')
     return list(categories.category_lat_name)
 
 
-def get_vacancies(cities=['kyiv'], categories=['it']):
+def get_vacancies(cities=('kyiv',), categories=('it',)):
+    """
+    get_vacancies is a function that parse work.ua site to get information about vacancies
+    and save the data into database. It saves information about vacancies like:
+    - vacancy_id            Example: '3430955'
+    - vacancy_link          Example: 'https://www.work.ua/jobs/3430955/'
+    - vacancy_title         Example: 'Big Data Architect'
+    - company_title         Example: 'SoftServe'
+    - vacancy_salary        Example: 'NULL' or '50000'
+    - publication_date      Example: '2019-02-22'
+    - vacancy_city          Example: 'kyiv'
+    - vacancy_category      Example: 'it'
+
+    :param cities: list of cities (default value is "kyiv").
+                   Use get_cities() function to get list of all cities.
+
+    :param categories: list of categories (default value is "it").
+                       Use get_categories() function to get list of all categories.
+    :return: pandas.DataFrame with information about vacancies
+    """
     import requests
     import pandas as pd
     import datetime
@@ -131,11 +167,28 @@ def get_vacancies(cities=['kyiv'], categories=['it']):
     cards1 = "card card-hover card-visited wordwrap job-link js-hot-block"
     cards2 = "card card-hover card-visited wordwrap job-link"
     sal = "nowrap"
-    engine = connect_to_database()
+    empty_page = 'За вашим запитом з вибраними фільтрами вакансій поки немає.'
+    postgres_engine = connect_to_database()
 
     def parse_cards(all_cards, city, category_lat_name):
-        def conv_date(list_of_items):
-            month = int(list_of_items[1].replace('січня', '1').replace('лютого', '2').replace('березня', '3') \
+        """
+        parse_card is a function to parse all cards with vacancy info that is got from web page.
+
+        :param all_cards: list of cards
+        :param city: current city
+        :param category_lat_name: current category
+        :return: if all_cards do not have information about vacancy
+                 the function returns "False" else returns "None"
+        """
+
+        def convert_date(list_of_items):
+            """
+            convert_date is a function to convert date from string to datetime.date format
+            :param list_of_items: list of information about date
+            :return: datetime.date
+            """
+            month = int(list_of_items[1] \
+                        .replace('січня', '1').replace('лютого', '2').replace('березня', '3') \
                         .replace('квітня', '4').replace('травня', '5').replace('червня', '6') \
                         .replace('липня', '7').replace('серпня', '8').replace('вересня', '9') \
                         .replace('жовтня', '10').replace('листопада', '11').replace('грудня', '12'))
@@ -143,14 +196,22 @@ def get_vacancies(cities=['kyiv'], categories=['it']):
             year = int(list_of_items[2])
             return datetime.date(year, month, day)
 
-        vacancy_links = (list(map(lambda j: None if j.a == None else f'{site_link}{j.a.get("href")}', all_cards)))
-        vacancy_ids = (list(map(lambda j: None if j is None else j.replace(f'{site_link}/jobs/', '').replace('/', ''), vacancy_links)))
-        temp = (list(map(lambda j: None if j.a is None else j.a.get('title').split(", вакансія від "), all_cards)))
+        vacancy_links = (list(map(lambda j: None if j.a is None else \
+            f'{site_link}{j.a.get("href")}', all_cards)))
+        vacancy_ids = (list(map(lambda j: None if j is None else \
+            j.replace(f'{site_link}/jobs/', '').replace('/', ''), vacancy_links)))
+        temp = (list(map(lambda j: None if j.a is None else \
+            j.a.get('title').split(", вакансія від "), all_cards)))
         vacancy_titles = (list(map(lambda j: None if j == [] else j[0], temp)))
         temp_dates = (list(map(lambda j: None if j == [] else j[1].split(' '), temp)))
-        publication_dates = (list(map(conv_date, temp_dates)))
+        publication_dates = (list(map(convert_date, temp_dates)))
         company_titles = (list(map(lambda i: None if i.b is None else i.b.get_text(), all_cards)))
-        vacancy_salaries = (list(map(lambda j: None if j.find('span', class_=sal) is None else int(j.find('span', class_=sal).get_text().replace('\xa0', '').replace('грн', '').replace('*', '')), all_cards)))
+        vacancy_salaries = (list(map(lambda j: None if j.find('span', class_=sal) is None else \
+            int(j.find('span', class_=sal) \
+                .get_text() \
+                .replace('\xa0', '') \
+                .replace('грн', '') \
+                .replace('*', '')), all_cards)))
         multiplay = len(vacancy_ids)
 
         vacancy_cities = ((city + "===") * multiplay).split("===")[:-1]
@@ -159,31 +220,31 @@ def get_vacancies(cities=['kyiv'], categories=['it']):
                 "vacancy_title": vacancy_titles, "company_title": company_titles,
                 "vacancy_salary": vacancy_salaries, "publication_date": publication_dates,
                 "vacancy_city": vacancy_cities, "vacancy_category": vacancy_categories}
-        if data['vacancy_id'] == []:
+        if not data['vacancy_id']:
             return False
-        df = pd.DataFrame.from_dict(data)
-        df.to_sql(f'work_ua_vacancies1_{datetime.date.today()}', engine, if_exists='append')
+        temp_result = pd.DataFrame.from_dict(data)
+        temp_result.to_sql(f'work_ua_vacancies_{datetime.date.today()}',
+                           postgres_engine,
+                           if_exists='append')
         print(city, category_lat_name, datetime.datetime.now())
 
-    for city in cities:
+    for city_name in cities:
         for category in categories:
             page_number = 1
-            url = f"{site_link}/jobs-{city}-{category}/?page={page_number}"
+            url = f"{site_link}/jobs-{city_name}-{category}/?page={page_number}"
             response = requests.get(url)
             results_page = BeautifulSoup(response.content, 'lxml')
-            while results_page.find('b').get_text() != 'За вашим запитом з вибраними фільтрами вакансій поки немає.':
-                all_cards = results_page.find_all('div', class_=cards1)
-                if all_cards != []:
-                    parse_cards(all_cards, city, category)
+            while results_page.find('b').get_text() != empty_page:
+                cards = results_page.find_all('div', class_=cards1)
+                if cards:
+                    parse_cards(cards, city_name, category)
 
-                all_cards = results_page.find_all('div', class_=cards2)
-                if all_cards != []:
-                    parse_cards(all_cards, city, category)
+                cards = results_page.find_all('div', class_=cards2)
+                if cards:
+                    parse_cards(cards, city_name, category)
                 page_number += 1
-                url = f"{site_link}/jobs-{city}-{category}/?page={page_number}"
+                url = f"{site_link}/jobs-{city_name}-{category}/?page={page_number}"
                 response = requests.get(url)
                 results_page = BeautifulSoup(response.content, 'lxml')
-
-    return pd.read_sql(f'SELECT * FROM public."work_ua_vacancies1_{datetime.date.today()}"', engine)
-
-
+    result_sql = f'SELECT * FROM public."work_ua_vacancies_{datetime.date.today()}"'
+    return pd.read_sql(result_sql, postgres_engine)
